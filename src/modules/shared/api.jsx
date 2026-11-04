@@ -1,43 +1,62 @@
 import axios from "axios"
 import { useAuthContext } from "../../context/Auth.context"
 
-export const useApi=()=>{
+export const useApi = () => {
 
-    const context=useAuthContext()
-    
-    const api=axios.create({
-        baseURL:"http://localhost:5173/api",
-        withCredentials:true
-    })
+const context = useAuthContext()
 
-    api.interceptors.request.use((config)=>{
+const api = axios.create({
+    baseURL: "https://mern-backend-lake-eight.vercel.app/api",
+    withCredentials: true
+})
 
-        config.headers.Authorization=`Bearer ${context?.accessToken}`
+api.interceptors.request.use((config) => {
 
-        return config
-    })
+    if (context?.accessToken) {
+        config.headers.Authorization = `Bearer ${context.accessToken}`
+    }
 
-    api.interceptors.response.use(response=>response,
-        async(error)=>{
+    return config
+})
 
-            if(error.response.status===401){
-               try {
-                    const res =await axios.post('/api/auth/refresh',{},{withCredentials:true})
+api.interceptors.response.use(
+    response => response,
 
-                    context?.setAccessToken(res.data.data.accessToken)
+    async (error) => {
 
-                    error.config.headers.Authorization=`Bearer ${res.data.data.accessToken}`
+        if (error.response?.status === 401 && !error.config._retry) {
 
-                    return axios(error.config)
-               } catch (error) {
-                    return Promise.reject(error)
-               }
-                
+            error.config._retry = true
+
+            try {
+
+                const res = await axios.post(
+                    "https://mern-backend-lake-eight.vercel.app/api/auth/refresh",
+                    {},
+                    { withCredentials: true }
+                )
+
+                const newAccessToken = res.data.data.accessToken
+
+                context?.setAccessToken(newAccessToken)
+
+                error.config.headers.Authorization = `Bearer ${newAccessToken}`
+
+                return api(error.config)
+
+            } catch (refreshError) {
+
+                context?.setAccessToken(null)
+
+                return Promise.reject(refreshError)
             }
-
-            return Promise.reject(error)
         }
-    )
 
-    return api
+        return Promise.reject(error)
+    }
+)
+
+return api
+
+
 }
